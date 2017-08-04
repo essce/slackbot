@@ -26,7 +26,9 @@ THE SOFTWARE.
 package main
 
 import (
+	"bytes"
 	"encoding/csv"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -55,6 +57,12 @@ func main() {
 		if m.Type == "message" && strings.HasPrefix(m.Text, "<@"+id+">") {
 			// if so try to parse if
 			parts := strings.Fields(m.Text)
+			if parts[1] == "reddit" {
+				go func(m Message) {
+					m.Text = getRedditPosts()
+					postMessage(ws, m)
+				}(m)
+			}
 			if len(parts) == 3 && parts[1] == "stock" {
 				// looks good, get the quote and reply with the result
 				go func(m Message) {
@@ -64,7 +72,7 @@ func main() {
 				// NOTE: the Message object is copied, this is intentional
 			} else {
 				// huh?
-				m.Text = fmt.Sprintf("sorry, that does not compute\n")
+				m.Text = fmt.Sprintf("ball is life\n")
 				postMessage(ws, m)
 			}
 		}
@@ -88,4 +96,27 @@ func getQuote(sym string) string {
 		return fmt.Sprintf("%s (%s) is trading at $%s", rows[0][0], rows[0][1], rows[0][2])
 	}
 	return fmt.Sprintf("unknown response format (symbol was \"%s\")", sym)
+}
+
+// Gets reddit posts [default:10]
+func getRedditPosts() string {
+
+	url := fmt.Sprintf("https://www.reddit.com/r/nba/new.json?sort=hot&limit=5")
+	resp, err := http.Get(url)
+	if err != nil {
+		return fmt.Sprintf("error: %v", err)
+	}
+	defer resp.Body.Close()
+	var redditResp Reddit
+	err = json.NewDecoder(resp.Body).Decode(&redditResp)
+	if err != nil {
+		return fmt.Sprintf("error decoding json: %v", err)
+	}
+	var buffer bytes.Buffer
+	fmt.Println(len(redditResp.Data.Children))
+	for i := 0; i < 5; i++ {
+		buffer.WriteString(redditResp.Data.Children[i].Data.URL + "\n")
+	}
+
+	return fmt.Sprintf(buffer.String())
 }
